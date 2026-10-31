@@ -10,12 +10,22 @@ Mede o ganho das duas formas de paralelismo usadas no sistema:
 
 Uso:  python medir_desempenho.py      (leva alguns minutos; rode depois do atualizar.py)
 Saida: resultados/desempenho.csv e um resumo na tela (tire um print para a monografia).
+
+Cuidados de medicao:
+  - os downloads de teste vao para uma pasta TEMPORARIA, para nao sobrescrever os dados
+    congelados do experimento;
+  - a primeira rodada de download e descartada (aquecimento): nela a biblioteca obtem os
+    cookies de acesso do Yahoo, o que distorceria a comparacao;
+  - as rodadas seguintes alternam a ordem (sequencial/concorrente) e o resumo usa a mediana.
 """
 import importlib
 import os
 import platform
+import tempfile
 import time
+import warnings
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import pandas as pd
 from joblib import Parallel, delayed
@@ -24,7 +34,13 @@ import config
 
 baixar = importlib.import_module("01_baixar_dados")
 modelar = importlib.import_module("03_modelar")
-REPETICOES = 2
+# Esconde os avisos internos das bibliotecas. Fica DEPOIS dos imports porque o yfinance
+# registra os proprios filtros de aviso ao ser importado.
+warnings.simplefilter("ignore")
+REPETICOES = 3
+
+# downloads de teste numa pasta temporaria (nunca em dados/brutos)
+baixar.PASTA_PRECOS = Path(tempfile.mkdtemp(prefix="tcc_desempenho_"))
 
 
 def tempo_download(workers):
@@ -48,15 +64,17 @@ def tempo_modelagem(n_jobs):
 
 
 def main():
-    baixar.PASTA_PRECOS.mkdir(parents=True, exist_ok=True)
+    print("Aquecimento (descartado)...")
+    tempo_download(config.MAX_WORKERS)
     linhas = []
+    seq = ("download sequencial (1 thread)", 1)
+    con = (f"download concorrente ({config.MAX_WORKERS} threads)", config.MAX_WORKERS)
     for rep in range(1, REPETICOES + 1):
-        for nome, f, arg in [("download sequencial (1 thread)", tempo_download, 1),
-                             (f"download concorrente ({config.MAX_WORKERS} threads)", tempo_download,
-                              config.MAX_WORKERS)]:
-            s = f(arg)
-            print(f"[{rep}] {nome}: {s:.1f} s")
-            linhas.append({"etapa": nome, "repeticao": rep, "segundos": round(s, 2)})
+        ordem = [seq, con] if rep % 2 else [con, seq]     # alterna a ordem a cada rodada
+        for nome, workers in ordem:
+            s = tempo_download(workers)
+            print(f"[{rep}] {nome}: {s:.2f} s")
+            linhas.append({"etapa": nome, "repeticao": rep, "segundos": round(s, 3)})
     for nome, arg in [("modelagem em 1 processo", 1), (f"modelagem em {os.cpu_count()} nucleos", -1)]:
         s = tempo_modelagem(arg)
         print(f"{nome}: {s:.1f} s")
@@ -67,11 +85,12 @@ def main():
     config.RESULTADOS.mkdir(parents=True, exist_ok=True)
     df.to_csv(config.RESULTADOS / "desempenho.csv", index=False)
 
-    media = df.groupby("etapa", sort=False)["segundos"].mean()
-    print("\nResumo (media):")
-    print(media.round(1).to_string())
-    d_seq, d_con = media.iloc[0], media.iloc[1]
-    m_seq, m_par = media.iloc[2], media.iloc[3]
+    mediana = df.groupby("etapa")["segundos"].median()
+    print("\nResumo (mediana):")
+    print(mediana.round(2).to_string())
+    d_seq, d_con = mediana[seq[0]], mediana[con[0]]
+    m_seq = mediana["modelagem em 1 processo"]
+    m_par = mediana[f"modelagem em {os.cpu_count()} nucleos"]
     print(f"\nGanho na coleta:     {d_seq / d_con:.1f}x mais rapido")
     print(f"Ganho na modelagem:  {m_seq / m_par:.1f}x mais rapido")
     print(f"Maquina: {df['maquina'].iloc[0]}")

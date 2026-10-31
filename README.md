@@ -29,7 +29,7 @@ dados/processados/dataset.parquet
 resultados/*.csv|parquet ──► 04_figuras.py (figuras)   ──► app.py (Streamlit)
 ```
 
-Todos os parâmetros (amostra, datas, variáveis e modelos) ficam em `config.py`. O `atualizar.py` roda as etapas em sequência. No modo experimento, os dados já baixados são reutilizados: o Yahoo Finance reajusta a série histórica a cada novo dividendo, e baixar de novo mudaria levemente os resultados.
+Todos os parâmetros (amostra, datas, variáveis e modelos) ficam em `config.py`. O `atualizar.py` roda as etapas em sequência. O arquivo `dados/processados/dataset.parquet`, incluído no repositório, é o conjunto de dados congelado usado na monografia: `python atualizar.py` parte dele e reproduz exatamente os resultados. Uma nova coleta pode trazer valores levemente diferentes, porque o Yahoo Finance reajusta a série histórica a cada novo dividendo.
 
 ## Como executar
 
@@ -40,9 +40,10 @@ python -m venv .venv
 # Windows: .\.venv\Scripts\Activate.ps1    Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
 
-python atualizar.py            # experimento completo (dados fixos até 30/09/2026)
-python atualizar.py --baixar   # experimento, baixando os dados de novo
-python atualizar.py --hoje     # modo plataforma: dados e previsões até hoje
+python atualizar.py            # reproduz os resultados da monografia (dados congelados)
+python atualizar.py --preparar # recalcula as variaveis a partir dos dados brutos ja baixados
+python atualizar.py --baixar   # baixa os dados de novo (novo conjunto; resultados podem mudar)
+python atualizar.py --hoje     # modo plataforma: dados e previsoes ate hoje
 streamlit run app.py           # abre a aplicação web
 python -m pytest -v            # testes automatizados
 python medir_desempenho.py     # mede o ganho do paralelismo
