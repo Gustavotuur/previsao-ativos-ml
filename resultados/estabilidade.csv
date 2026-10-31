@@ -1,0 +1,4 @@
+conjunto,nivel,grupos,rf_melhor,diferenca_media_pp
+tecnicos,ano,7,2,-0.73
+tecnicos,ativo,10,3,-0.75
+tecnicos,regime_vol,2,0,-0.76

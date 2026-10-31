@@ -1,0 +1,12 @@
+# ambiente virtual e caches
+.venv/
+__pycache__/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# dados brutos baixados (podem ser recriados com 01_baixar_dados.py)
+dados/brutos/precos/
+dados/brutos/cdi.csv
+
+# dados processados, resultados e figuras FICAM no repositorio:
+# a aplicacao publicada no Streamlit Community Cloud precisa deles para funcionar.

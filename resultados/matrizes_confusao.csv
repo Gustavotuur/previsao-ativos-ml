@@ -1,0 +1,3 @@
+conjunto,modelo,verdadeiro_baixa,falso_alta,falsa_baixa,verdadeira_alta
+tecnicos,Regressao Logistica,3296,4890,3252,5256
+tecnicos,Random Forest,3365,4821,3446,5062

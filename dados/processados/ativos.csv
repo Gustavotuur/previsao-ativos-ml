@@ -1,0 +1,11 @@
+ativo,nome,tipo,primeiro_dia,ultimo_dia,volume_financeiro_mediano,incluido,motivo,observacoes,pct_alta
+BOVA11,iShares Ibovespa,etf,2017-01-02,2026-09-30,640432360,True,,2173,52.0
+SMAL11,iShares Small Cap,etf,2017-01-02,2026-09-30,94146016,True,,2173,50.9
+IVVB11,iShares S&P 500 em reais,etf,2017-01-02,2026-09-30,52485063,True,,2173,52.0
+DIVO11,It Now IDIV (dividendos),etf,2017-01-02,2026-09-30,1771346,True,,2174,52.3
+PETR4,Petrobras PN (petroleo),acao,2017-01-02,2026-09-30,674066101,True,,2174,53.0
+VALE3,Vale ON (mineracao),acao,2017-01-02,2026-09-30,1053016916,True,,2174,50.1
+ITUB4,Itau Unibanco PN (bancos),acao,2017-01-02,2026-09-30,609711210,True,,2174,50.6
+WEGE3,WEG ON (bens de capital),acao,2017-01-02,2026-09-30,218261573,True,,2174,50.6
+HGLG11,CSHG Logistica,fii,2017-01-02,2026-09-30,4476532,True,,2171,51.6
+KNRI11,Kinea Renda Imobiliaria,fii,2017-01-02,2026-09-30,3119836,True,,2174,48.8

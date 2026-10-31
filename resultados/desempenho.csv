@@ -1,0 +1,7 @@
+etapa,repeticao,segundos,maquina
+download sequencial (1 thread),1,7.01,"Intel64 Family 6 Model 165 Stepping 2, GenuineIntel | 12 nucleos | Windows 11"
+download concorrente (4 threads),1,0.89,"Intel64 Family 6 Model 165 Stepping 2, GenuineIntel | 12 nucleos | Windows 11"
+download sequencial (1 thread),2,0.78,"Intel64 Family 6 Model 165 Stepping 2, GenuineIntel | 12 nucleos | Windows 11"
+download concorrente (4 threads),2,0.83,"Intel64 Family 6 Model 165 Stepping 2, GenuineIntel | 12 nucleos | Windows 11"
+modelagem em 1 processo,1,138.66,"Intel64 Family 6 Model 165 Stepping 2, GenuineIntel | 12 nucleos | Windows 11"
+modelagem em 12 nucleos,1,61.97,"Intel64 Family 6 Model 165 Stepping 2, GenuineIntel | 12 nucleos | Windows 11"
