@@ -131,3 +131,21 @@ def test_sensibilidade_igual_ao_backtest(modelar):
         obtido = sens.loc[(sens["modelo"] == nome) & np.isclose(sens["custo"], config.CUSTO_POR_TROCA),
                           "retorno_anual"].iloc[0]
         assert np.isclose(esperado, obtido)
+
+
+# ---------------------------------------------------------------------------
+# Bootstrap em blocos: a diferenca observada e a diferenca real de acuracia
+# ---------------------------------------------------------------------------
+def test_bootstrap_blocos(modelar):
+    rng = np.random.default_rng(5)
+    datas = pd.bdate_range("2020-01-01", periods=200)
+    g = pd.DataFrame({"data": np.repeat(datas, 3), "alvo": rng.integers(0, 2, 600)})
+    g["pred_x"] = rng.integers(0, 2, 600)
+    g["pred_y"] = 1
+    r = modelar.bootstrap_blocos(g, "x", "y", semente=1)
+    esperado = (g["pred_x"] == g["alvo"]).mean() - (g["pred_y"] == g["alvo"]).mean()
+    assert np.isclose(r["diferenca"], esperado)
+    assert r["ic95_inf"] <= r["diferenca"] <= r["ic95_sup"]
+    assert 0 <= r["p_bilateral"] <= 1 and r["pregoes"] == 200
+    # mesma semente -> mesmo resultado (reprodutibilidade)
+    assert r == modelar.bootstrap_blocos(g, "x", "y", semente=1)

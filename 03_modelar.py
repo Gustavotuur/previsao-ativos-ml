@@ -37,6 +37,7 @@ Arquivos gerados em resultados/:
   curvas_backtest.parquet      patrimonio acumulado dia a dia (para graficos)
   backtest_sensibilidade.csv   retorno do backtest com diferentes custos por troca
   backtest_aleatorio.csv       modelo comparado com estrategias aleatorias de mesma exposicao
+  bootstrap_blocos.csv         diferencas de acuracia com bootstrap em blocos de pregoes
   importancia_variaveis.csv    quais indicadores cada modelo mais usou
   previsao_atual.csv           previsao para o proximo pregao
 """
@@ -340,6 +341,39 @@ def estrategias_aleatorias(g, semente):
     return pd.DataFrame(linhas)
 
 
+def bootstrap_blocos(g, a, b, semente):
+    """Diferenca de acuracia entre as previsoes a e b, com bootstrap em blocos de pregoes.
+
+    Os acertos sao somados por pregao (todos os ativos daquele dia juntos) e os pregoes
+    sao reamostrados em blocos consecutivos de config.BLOCO_BOOTSTRAP (bootstrap em blocos
+    moveis). Assim, a correlacao entre ativos no mesmo dia e entre dias proximos e
+    preservada, e o erro-padrao nao fica subestimado como nos testes que supoem
+    independencia.
+    """
+    y = g["alvo"].astype(int)
+    dia = pd.DataFrame({"data": g["data"].values,
+                        "ok_a": (g[f"pred_{a}"] == y).astype(int).values,
+                        "ok_b": (g[f"pred_{b}"] == y).astype(int).values})
+    por_dia = dia.groupby("data").agg(ok_a=("ok_a", "sum"), ok_b=("ok_b", "sum"), n=("ok_a", "size"))
+    dif_dia = (por_dia["ok_a"] - por_dia["ok_b"]).to_numpy(float)
+    n_dia = por_dia["n"].to_numpy(float)
+    T, L = len(n_dia), min(config.BLOCO_BOOTSTRAP, len(n_dia))
+    observada = dif_dia.sum() / n_dia.sum()
+    rng = np.random.default_rng(semente)
+    k = int(np.ceil(T / L))                                    # blocos por reamostragem
+    inicios = rng.integers(0, T - L + 1, size=(config.N_BOOTSTRAP, k))
+    idx = (inicios[:, :, None] + np.arange(L)).reshape(config.N_BOOTSTRAP, -1)[:, :T]
+    reamostras = dif_dia[idx].sum(axis=1) / n_dia[idx].sum(axis=1)
+    centradas = reamostras - observada                         # distribuicao sob H0
+    return {"diferenca": observada,
+            "erro_padrao": reamostras.std(ddof=1),
+            "ic95_inf": np.percentile(reamostras, 2.5),
+            "ic95_sup": np.percentile(reamostras, 97.5),
+            "p_bilateral": float(np.mean(np.abs(centradas) >= abs(observada))),
+            "p_unilateral": float(np.mean(centradas >= observada)),   # H1: a melhor que b
+            "pregoes": T, "previsoes": int(n_dia.sum())}
+
+
 # ===========================================================================
 # PROGRAMA PRINCIPAL
 # ===========================================================================
@@ -455,6 +489,23 @@ def main():
     pd.concat(bts).to_csv(config.RESULTADOS / "backtest_por_ativo.csv", index=False)
     pd.concat(curvas).to_parquet(config.RESULTADOS / "curvas_backtest.parquet", index=False)
 
+    # ---- 7a. BOOTSTRAP EM BLOCOS: robustez dos testes a dependencia entre previsoes ----
+    pares = [(k, "sempre_alta") for k in CHAVES]
+    pares += [(CHAVES[i], CHAVES[j]) for i in range(len(CHAVES)) for j in range(i + 1, len(CHAVES))]
+    segmentos = [("geral", "todos", prev)]
+    segmentos += [("periodo", v, gg) for v, gg in prev.groupby("periodo")]
+    segmentos += [("tipo", v, gg) for v, gg in prev.groupby("tipo")]
+    segmentos += [("ano", v, gg) for v, gg in prev.groupby(prev["data"].dt.year)]
+    segmentos += [("regime_vol", v, gg) for v, gg in prev.groupby("regime_vol")]
+    boot = []
+    for s_i, (seg, valor, gg) in enumerate(segmentos):
+        for a, b in pares:
+            r = bootstrap_blocos(gg, a, b, config.SEMENTE + s_i)
+            boot.append({"segmento": seg, "valor": valor, "modelo_a": rotulo(a)[1],
+                         "modelo_b": rotulo(b)[1], "conjunto": rotulo(a)[0], **r})
+    boot = pd.DataFrame(boot)
+    boot.to_csv(config.RESULTADOS / "bootstrap_blocos.csv", index=False)
+
     # ---- 7b. SENSIBILIDADE AOS CUSTOS E ESTRATEGIAS ALEATORIAS (todo o teste) ----
     sens, alea = [], []
     for i, (a, g) in enumerate(prev.groupby("ativo")):   # ordem alfabetica: semente estavel
@@ -472,6 +523,10 @@ def main():
     print("\nBacktest: em quantos ativos o modelo supera comprar e manter, por custo:")
     print(sens.groupby(["modelo", "custo"])["supera_comprar_e_manter"].sum()
           .unstack("custo").to_string())
+    print("\nBootstrap em blocos de pregoes (geral e periodo):")
+    print(boot[boot["segmento"].isin(["geral", "periodo"])]
+          [["segmento", "valor", "modelo_a", "modelo_b", "diferenca", "ic95_inf", "ic95_sup", "p_bilateral"]]
+          .round(4).to_string(index=False))
     print("\nRandom Forest x Logistica (McNemar):")
     print(comp[(comp["modelo_a"] == "Regressao Logistica") & (comp["modelo_b"] == "Random Forest")
                & comp["segmento"].isin(["geral", "periodo"])]

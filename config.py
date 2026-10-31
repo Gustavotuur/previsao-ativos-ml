@@ -166,3 +166,10 @@ CUSTOS_SENSIBILIDADE = [0.0, 0.0003, 0.0005, 0.001, 0.002]
 # ativo ou no CDI, com a MESMA proporcao de dias no ativo que o modelo. Servem para
 # saber se o resultado do backtest vem da previsao ou so da exposicao ao CDI.
 N_ESTRATEGIAS_ALEATORIAS = 500
+
+# Bootstrap em blocos (robustez dos testes estatisticos): os testes binomial e de
+# McNemar supoem previsoes independentes, mas os dez ativos de um mesmo pregao se movem
+# juntos e dias proximos podem ser dependentes. O bootstrap sorteia BLOCOS de pregoes
+# consecutivos (com todos os ativos de cada pregao), preservando essas dependencias.
+BLOCO_BOOTSTRAP = 21       # pregoes por bloco (cerca de um mes)
+N_BOOTSTRAP = 2000         # numero de reamostragens
