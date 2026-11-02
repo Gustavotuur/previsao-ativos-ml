@@ -73,7 +73,7 @@ def pacote_certificados():
     Por que existe: em redes de empresa, o trafego HTTPS costuma passar por um
     "inspetor" que usa um certificado proprio da empresa. O Windows conhece esse
     certificado, mas o yfinance nao, e o download falha com
-    "self signed certificate in certificate chain" (foi o erro no PC da empresa).
+    "self signed certificate in certificate chain".
     Solucao: juntar os certificados publicos (certifi) com os do Windows.
     """
     # 1) certificados publicos padrao
