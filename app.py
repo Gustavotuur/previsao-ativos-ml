@@ -75,8 +75,8 @@ st.caption(f"TCC — Ciência da Computação (UVA) · Gustavo Pereira da Silva 
 with st.sidebar:
     conj = st.radio("Variáveis", list(config.CONJUNTOS), format_func=NOME_CONJ.get,
                     index=len(config.CONJUNTOS) - 1)
-    st.caption("Indicadores técnicos: VIX, CCI, MACD, Williams %R, estocástico (SMI), TRIX, "
-               "Bollinger, CMO, DPO e ROC.")
+    st.caption("Variáveis: variação do VIX e nove indicadores técnicos (CCI, MACD normalizado/PPO, "
+               "Williams %R, estocástico (SMI), TRIX, Bollinger %B, CMO, DPO e ROC).")
 
 # A pagina tem 4 abas; cada bloco "with aba_x:" desenha o conteudo de uma delas
 aba_hoje, aba_ativo, aba_comp, aba_metodo = st.tabs(
@@ -215,7 +215,7 @@ with aba_metodo:
 e volume financeiro diário mediano de pelo menos R$ {config.LIQUIDEZ_MINIMA:,.0f}.
 Dados: Yahoo Finance (preços ajustados), VIX e CDI (Banco Central, SGS 12).
 
-**Variáveis.** Dez indicadores técnicos clássicos (VIX, CCI, MACD, Williams %R, estocástico,
+**Variáveis.** Variação do VIX e nove indicadores técnicos clássicos (CCI, MACD normalizado (PPO), Williams %R, estocástico,
 TRIX, Bollinger, CMO, DPO e ROC){" e, no conjunto ampliado, métricas de risco e retorno" if "ampliado" in config.CONJUNTOS else ""}.
 Todas usam apenas informação disponível no fechamento do dia da previsão; o VIX entra com
 um dia de defasagem, porque o mercado americano fecha depois da B3.
