@@ -34,7 +34,7 @@ def vix(precos):
 
 
 # ---------------------------------------------------------------------------
-# 1. Nenhum indicador pode usar informacao futura (sem vazamento de dados)
+# 1. Nenhum indicador pode usar informacao futura (verificacao de vazamento temporal)
 # ---------------------------------------------------------------------------
 def test_indicadores_nao_usam_o_futuro(prep, precos, vix):
     completo = prep.calcular_variaveis(precos, vix)

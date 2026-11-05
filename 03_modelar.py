@@ -204,8 +204,9 @@ def metricas(g):
     f1                   media harmonica de precisao e recall
     auc                  capacidade de ordenar dias de alta acima dos de queda pela
                          probabilidade (0,5 = acaso; 1,0 = perfeito)
-    p_valor_vs_sempre_alta  teste binomial: chance de acertar tanto quanto acertou se,
-                         na verdade, o modelo nao fosse melhor que "sempre alta"
+    p_valor_vs_sempre_alta  teste binomial unilateral: probabilidade de acertar pelo menos
+                         tanto quanto acertou se a taxa de acerto verdadeira fosse a de
+                         "sempre alta" (nao e a probabilidade de ter vencido por sorte)
     """
     y = g["alvo"].astype(int)
     acc_base = accuracy_score(y, g["pred_sempre_alta"])
@@ -237,7 +238,8 @@ def mcnemar(g, a, b):
     Ideia: dias em que os DOIS acertam ou os DOIS erram nao dizem nada sobre quem e
     melhor. So importam os dias em que UM acertou e o OUTRO errou. Se os modelos fossem
     equivalentes, esses dias se dividiriam meio a meio (como cara ou coroa). O p-valor
-    mede a chance de uma divisao tao desigual quanto a observada acontecer por acaso.
+    e a probabilidade de uma divisao tao desigual quanto a observada, ou mais, caso os
+    modelos fossem de fato equivalentes.
     """
     y = g["alvo"].astype(int)
     acerta_a, acerta_b = g[f"pred_{a}"] == y, g[f"pred_{b}"] == y

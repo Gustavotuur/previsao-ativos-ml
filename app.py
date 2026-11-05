@@ -4,27 +4,22 @@ app.py - ETAPA 7: A PLATAFORMA WEB (STREAMLIT)
 
 Rodar:  streamlit run app.py   (abre no navegador em http://localhost:8501)
 
-COMO O STREAMLIT FUNCIONA
-  Voce escreve um script Python comum e cada comando "st.algo(...)" vira um elemento
-  na pagina: st.title -> titulo, st.dataframe -> tabela, st.line_chart -> grafico,
-  st.selectbox -> lista de escolha. Toda vez que o usuario mexe em algo (escolhe um
-  ativo, por exemplo), o Streamlit roda o script de novo de cima para baixo com o
-  novo valor. Nao e preciso escrever HTML nem JavaScript.
-
 ARQUITETURA
-  O site NAO baixa dados nem treina modelos: so LE os arquivos gerados pelos scripts
-  01 a 03. Assim ele abre rapido. Para atualizar as previsoes, roda-se
-  "python atualizar.py --hoje" (manualmente ou agendado) e o site mostra os novos arquivos.
+  O site nao baixa dados nem treina modelos: apenas le os arquivos gerados pelos
+  scripts 01 a 03.
+
+EXPERIMENTO x PLATAFORMA
+  Por padrao, os arquivos publicados sao os do experimento da monografia (base
+  congelada ate config.DATA_FIM_EXPERIMENTO). "python atualizar.py --hoje" gera
+  previsoes com dados ate a data atual; a pagina indica qual dos dois casos exibe.
 """
 import pandas as pd
 import streamlit as st
 
 import config
 
-# Titulo da aba do navegador e layout largo
 st.set_page_config(page_title="Previsão de Movimentos de Ativos", layout="wide")
 
-# Nomes para exibir (o codigo usa "logistica", a tela mostra "Regressão Logística")
 NOME_CONJ = {"tecnicos": "Indicadores técnicos", "ampliado": "Técnicos + risco e retorno"}
 _MOD = {"logistica": "Regressão Logística", "random_forest": "Random Forest",
         "rede_neural": "Rede Neural (MLP)"}
@@ -32,8 +27,6 @@ NOME_MOD = {m: _MOD[m] for m in config.MODELOS}
 NOME_TIPO = {"etf": "ETF", "acao": "Ação", "fii": "FII"}
 
 
-# @st.cache_data: o Streamlit guarda o resultado desta funcao na memoria. Como o
-# script roda de novo a cada clique, sem o cache os arquivos seriam relidos toda vez.
 @st.cache_data
 def carregar():
     """Le todos os arquivos de resultados num dicionario D."""
@@ -65,10 +58,28 @@ except FileNotFoundError as erro:
     st.error(f"Arquivo não encontrado: {erro.filename}. Rode antes  python atualizar.py")
     st.stop()
 
+
+
+def br(data):
+    """'2026-09-30' -> '30/09/2026'."""
+    return pd.Timestamp(data).strftime("%d/%m/%Y")
+
+
+# Os arquivos exibidos vem do experimento (base congelada) ou de uma atualizacao
+REFERENCIA = str(D["atual"]["data_referencia"].max())
+EXPERIMENTO = REFERENCIA <= config.DATA_FIM_EXPERIMENTO
+
 st.title("Previsão de Movimentos de Ativos Financeiros com Machine Learning")
-st.caption(f"TCC — Ciência da Computação (UVA) · Gustavo Pereira da Silva · "
-           f"Dados atualizados em {D['atualizado']} · "
+st.caption("TCC — Ciência da Computação (UVA) · Gustavo Pereira da Silva · "
            "Material educacional: não é recomendação de investimento.")
+if EXPERIMENTO:
+    st.info(f"**Resultados do experimento da monografia.** Base congelada de "
+            f"{br(config.DATA_INICIO)} a {br(config.DATA_FIM_EXPERIMENTO)}. "
+            f"A previsão exibida é a do pregão seguinte a {br(REFERENCIA)}, não a de hoje.")
+else:
+    st.info(f"**Atualização da plataforma** com dados até {br(REFERENCIA)}. Estas previsões "
+            f"não fazem parte da avaliação da monografia, que usa a base congelada até "
+            f"{br(config.DATA_FIM_EXPERIMENTO)}.")
 
 # Barra lateral: escolha do conjunto de variaveis (so aparece mais de uma opcao
 # se o conjunto "ampliado" estiver ligado no config.py)
@@ -78,15 +89,15 @@ with st.sidebar:
     st.caption("Variáveis: variação do VIX e nove indicadores técnicos (CCI, MACD normalizado/PPO, "
                "Williams %R, estocástico (SMI), TRIX, Bollinger %B, CMO, DPO e ROC).")
 
-# A pagina tem 4 abas; cada bloco "with aba_x:" desenha o conteudo de uma delas
-aba_hoje, aba_ativo, aba_comp, aba_metodo = st.tabs(
-    ["Previsões de hoje", "Ativo", "Comparação dos modelos", "Método"])
+aba_prev, aba_ativo, aba_comp, aba_metodo = st.tabs(
+    ["Última previsão", "Ativo", "Comparação dos modelos", "Método"])
 
 # ---------------------------------------------------------------------------
-# ABA 1: a previsao do proximo pregao para todos os ativos + acerto recente
-with aba_hoje:
+# ABA 1: previsao do pregao seguinte a data de referencia + acerto no fim do periodo
+with aba_prev:
     at = D["atual"].merge(D["ativos"][["ativo", "nome", "tipo"]], on="ativo")
-    st.subheader(f"Probabilidade de alta no próximo pregão (após {at['data_referencia'].max()})")
+    st.subheader(f"Probabilidade de alta no pregão seguinte a {br(REFERENCIA)}"
+                 + (" (fim do experimento)" if EXPERIMENTO else ""))
     tab = pd.DataFrame({"Ativo": at["ativo"], "Nome": at["nome"],
                         "Tipo": at["tipo"].map(NOME_TIPO)})
     for m, nome in NOME_MOD.items():
@@ -99,10 +110,10 @@ with aba_hoje:
     st.dataframe(tab.style.format({n: "{:.1%}" for n in NOME_MOD.values()})
                  .background_gradient(subset=list(NOME_MOD.values()), cmap="RdBu", vmin=0.3, vmax=0.7),
                  width="stretch", hide_index=True)
-    st.caption("A probabilidade vem de modelos treinados com todo o histórico disponível. "
+    st.caption(f"Modelos treinados com o histórico disponível até {br(REFERENCIA)}. "
                "Valores perto de 50% indicam pouca convicção.")
 
-    st.subheader("Acerto recente (todos os ativos)")
+    st.subheader("Acerto no fim do período avaliado (todos os ativos)")
     pv = D["previsoes"].copy()
     pv["data"] = pd.to_datetime(pv["data"])
     fim = pv["data"].max()
@@ -117,6 +128,8 @@ with aba_hoje:
     cols_pct = list(NOME_MOD.values()) + ["Sempre alta"]
     st.dataframe(pd.DataFrame(linhas).style.format({c: "{:.1%}" for c in cols_pct}),
                  width="stretch", hide_index=True)
+    st.caption(f"Janelas contadas para trás a partir do último pregão com resultado "
+               f"conhecido ({br(fim)}).")
 
 # ---------------------------------------------------------------------------
 # ABA 2: um ativo escolhido: previsao, graficos, desempenho e backtest
@@ -128,7 +141,7 @@ with aba_ativo:
 
     a = D["atual"][D["atual"]["ativo"] == escolha]
     if not a.empty:
-        st.subheader(f"Previsão para o pregão seguinte a {a['data_referencia'].iloc[0]}")
+        st.subheader(f"Previsão para o pregão seguinte a {br(a['data_referencia'].iloc[0])}")
         for col, (m, nome) in zip(st.columns(len(NOME_MOD)), NOME_MOD.items()):
             p = a[f"prob_alta_{conj}__{m}"].iloc[0]
             col.metric(nome, "ALTA" if p >= 0.5 else "BAIXA", f"prob. de alta {p:.1%}",
@@ -217,8 +230,9 @@ Dados: Yahoo Finance (preços ajustados), VIX e CDI (Banco Central, SGS 12).
 
 **Variáveis.** Variação do VIX e nove indicadores técnicos clássicos (CCI, MACD normalizado (PPO), Williams %R, estocástico,
 TRIX, Bollinger, CMO, DPO e ROC){" e, no conjunto ampliado, métricas de risco e retorno" if "ampliado" in config.CONJUNTOS else ""}.
-Todas usam apenas informação disponível no fechamento do dia da previsão; o VIX entra com
-um dia de defasagem, porque o mercado americano fecha depois da B3.
+Foram calculadas para usar apenas informação disponível no fechamento do dia da previsão,
+o que é conferido por um teste automatizado; o VIX entra com um dia de defasagem, porque o
+mercado americano fecha depois da B3.
 
 **Modelos.** {", ".join(NOME_MOD.values())}, com hiperparâmetros fixados antes dos testes.
 
@@ -229,4 +243,7 @@ pregões, testes sucessivos de {config.JANELA_TESTE}. O período a partir de
 **Comparações.** Linhas de base (sempre alta, classe majoritária, persistência), teste
 binomial contra "sempre alta" e teste de McNemar entre modelos, no geral, por ano e por
 regime de volatilidade.
+
+**Dados.** Último download dos dados brutos: {D['atualizado']}. Os resultados do experimento
+usam a base congelada até {br(config.DATA_FIM_EXPERIMENTO)}, independentemente dessa data.
 """)

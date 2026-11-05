@@ -5,7 +5,7 @@ Autor: **Gustavo Pereira da Silva**. Orientadora: **Profa. Ana Maria dos Santos 
 
 Este sistema reprodutível prevê a direção do próximo pregão (alta ou baixa) de 10 ativos da B3 com **Regressão Logística** e **Random Forest**. Ele cobre todas as etapas:
 - coleta concorrente de dados públicos;
-- indicadores técnicos sem vazamento de dados;
+- indicadores técnicos calculados com medidas para reduzir o vazamento temporal, com verificação automática;
 - avaliação por **validação walk-forward**;
 - testes estatísticos (binomial e McNemar);
 - uma **aplicação web em Streamlit**.
@@ -33,7 +33,7 @@ Todos os parâmetros (amostra, datas, variáveis e modelos) ficam em `config.py`
 
 ## Como executar
 
-Requisitos: Python 3.11 ou mais novo.
+Requisitos: Python 3.11 ou mais novo (os resultados foram gerados com Python 3.12.10).
 
 ```bash
 python -m venv .venv
@@ -50,6 +50,13 @@ python medir_desempenho.py     # mede o ganho do paralelismo
 ```
 
 O notebook `estudo_passo_a_passo.ipynb` percorre o pipeline de forma didática.
+
+## Experimento e plataforma
+
+- **Resultados do experimento:** gerados com a base congelada de 01/01/2018 a 30/09/2026 (`DATA_FIM_EXPERIMENTO` em `config.py`). São os números da monografia e os que a aplicação mostra por padrão.
+- **Atualização da plataforma:** `python atualizar.py --hoje` baixa os dados até a data atual e gera novas previsões. Esses resultados não fazem parte da avaliação da monografia.
+
+A aplicação indica qual dos dois casos está sendo exibido e, separadamente, a data do último download dos dados.
 
 ## Estrutura do repositório
 
@@ -69,10 +76,33 @@ O notebook `estudo_passo_a_passo.ipynb` percorre o pipeline de forma didática.
 ## Decisões de método
 
 - **Problema:** classificação binária. O alvo é 1 se o fechamento do próximo pregão for maior que o de hoje.
-- **Sem vazamento de dados:** os indicadores usam só dados até o dia da previsão. O VIX entra com 1 dia de defasagem e o DPO é calculado na versão causal. O teste `test_indicadores_nao_usam_o_futuro` verifica isso automaticamente.
+- **Medidas para reduzir o vazamento temporal:** os indicadores são calculados apenas com dados até o fechamento do dia da previsão, o VIX entra com 1 dia de defasagem e o DPO é calculado na versão causal. O teste `test_indicadores_nao_usam_o_futuro` recalcula os indicadores com a série cortada em várias datas e confere se os valores não mudam. Essas verificações cobrem os indicadores e o walk-forward; a seleção da amostra, porém, usou critérios de histórico e liquidez avaliados no período inteiro (viés de sobrevivência, discutido na monografia).
 - **Validação walk-forward** com janela expansiva: 504 pregões de treino inicial e testes de 126. O período a partir de 01/10/2025 é reservado e reportado à parte.
 - **Hiperparâmetros fixados antes dos testes**, sem busca, e semente aleatória fixa.
 - **Referências de comparação:** "sempre alta", classe majoritária e persistência.
+
+## Versões utilizadas
+
+Versões instaladas no ambiente em que os resultados da monografia foram gerados (Windows, Python 3.12.10):
+
+| Biblioteca | Versão |
+|---|---|
+| pandas | 3.1.0 |
+| numpy | 2.5.4 |
+| scikit-learn | 1.9.1 |
+| scipy | 1.18.1 |
+| joblib | 1.6.0 |
+| yfinance | 1.7.0 |
+| curl_cffi | 0.17.0 |
+| requests | 2.34.2 |
+| certifi | 2026.10.23 |
+| pyarrow | 26.0.0 |
+| matplotlib | 3.11.2 |
+| seaborn | 0.13.2 |
+| streamlit | 1.66.1 |
+| pytest | 9.2.0 |
+
+O `requirements.txt` fixa a versão do Streamlit (a mesma usada na aplicação publicada) e indica versões mínimas para as demais.
 
 ## Licença
 

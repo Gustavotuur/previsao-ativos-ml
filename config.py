@@ -5,62 +5,50 @@ config.py - CONFIGURACAO CENTRAL DO TCC
 Previsao de Movimentos de Ativos Financeiros com Machine Learning
 Aluno: Gustavo Pereira da Silva - Orientadora: Profa. Ana Maria dos Santos Vianna
 
-PARA QUE SERVE ESTE ARQUIVO
----------------------------
-Ele nao executa nada: so guarda DECISOES. Todos os outros scripts fazem "import config"
-e leem daqui a amostra, as datas, as variaveis e os parametros dos modelos.
-Vantagem: a metodologia descrita na monografia e o codigo dizem exatamente a mesma
-coisa, e para mudar o experimento (por exemplo, incluir um ativo) basta mexer aqui.
+Reune as decisoes do experimento (amostra, datas, variaveis, modelos e validacao).
+Os demais scripts importam este modulo, de modo que a metodologia descrita na
+monografia e o codigo usam os mesmos parametros.
 """
-import os                     # acesso a variaveis de ambiente do sistema operacional
-from datetime import date     # para saber a data de hoje
-from pathlib import Path      # forma moderna de montar caminhos de pastas e arquivos
+import os
+from datetime import date
+from pathlib import Path
 
 # ===========================================================================
-# PASTAS
+# PASTAS (relativas a pasta do projeto)
 # ===========================================================================
-# __file__ e o caminho deste proprio arquivo (config.py). .resolve() transforma em
-# caminho absoluto e .parent pega a pasta onde ele esta, ou seja, a pasta do projeto.
-# Assim os scripts funcionam em qualquer computador, sem caminho fixo tipo "C:\TCC".
 RAIZ = Path(__file__).resolve().parent
-
-# O operador "/" do Path junta pedacos de caminho: RAIZ / "dados" -> C:\TCC\tcc_previsao\dados
-DADOS_BRUTOS = RAIZ / "dados" / "brutos"            # o que foi baixado da internet
+DADOS_BRUTOS = RAIZ / "dados" / "brutos"            # dados baixados
 DADOS_PROCESSADOS = RAIZ / "dados" / "processados"  # dados limpos + indicadores
-RESULTADOS = RAIZ / "resultados"                    # tabelas de metricas e previsoes
-FIGURAS = RAIZ / "figuras"                          # graficos para a monografia
+RESULTADOS = RAIZ / "resultados"                    # metricas e previsoes
+FIGURAS = RAIZ / "figuras"                          # graficos da monografia
 
 # ===========================================================================
 # PERIODO
 # ===========================================================================
-# Baixamos um ano a mais (2017) do que analisamos (2018). Motivo: alguns indicadores
-# so passam a existir depois de acumular historico (ex.: o TRIX usa tres medias de 20
-# dias encadeadas). Esse ano extra e o "aquecimento": em 01/01/2018 tudo ja tem valor.
+# O download comeca um ano antes da amostra para o aquecimento dos indicadores:
+# alguns so tem valor depois de acumular historico (o TRIX encadeia tres medias
+# de 20 dias). Em 01/01/2018 todos ja estao definidos.
 DATA_INICIO_DOWNLOAD = "2017-01-01"
 DATA_INICIO = "2018-01-01"            # inicio da amostra analisada
 
-# Data final FIXA do experimento: assim, quem rodar o codigo daqui a um ano obtem os
-# mesmos numeros que estao na monografia (reprodutibilidade).
+# Data final fixa do experimento, para que os resultados da monografia possam ser
+# reproduzidos em qualquer data.
 DATA_FIM_EXPERIMENTO = "2026-09-30"
 
-# Modo plataforma: "python atualizar.py --hoje" cria a variavel de ambiente TCC_ATE_HOJE.
-# Se ela existir, usamos os dados ate hoje (para a previsao do dia seguinte no site);
-# se nao existir, usamos a data fixa do experimento.
-# Sintaxe: "valor_se_verdadeiro if condicao else valor_se_falso"
+# Modo plataforma ("python atualizar.py --hoje" define TCC_ATE_HOJE): usa os dados
+# ate a data atual. Esses resultados nao fazem parte da avaliacao da monografia.
 DATA_FIM = date.today().isoformat() if os.environ.get("TCC_ATE_HOJE") else DATA_FIM_EXPERIMENTO
 
-# Periodo final RESERVADO (o ultimo ano). Os modelos o preveem normalmente, sempre
-# treinando so com o passado, mas nenhuma decisao do trabalho e tomada olhando para
-# ele. Funciona como uma "prova final" e e reportado separadamente na monografia.
+# Periodo final reservado (o ultimo ano). E previsto normalmente, sempre com treino
+# apenas no passado, mas nenhuma decisao do trabalho foi tomada com base nele;
+# e reportado separadamente.
 INICIO_RESERVADO = "2025-10-01"
 
 # ===========================================================================
 # AMOSTRA
 # ===========================================================================
-# Dicionarios Python: {chave: valor}. A chave e o codigo (ticker) na B3 e o valor e
-# uma descricao. Todos tem abertura, maxima, minima e fechamento diarios, entao todos
-# os indicadores tecnicos podem ser calculados para todos.
-# So entram no estudo os que passarem nos filtros de historico e liquidez (mais abaixo).
+# Ticker na B3 -> descricao. Todos tem abertura, maxima, minima e fechamento diarios.
+# So entram no estudo os que passam nos filtros de historico e liquidez (abaixo).
 ETFS = {
     "BOVA11": "iShares Ibovespa",
     "SMAL11": "iShares Small Cap",
@@ -75,101 +63,81 @@ ACOES = {
     "WEGE3": "WEG ON (bens de capital)",
 }
 
-# Fundos de investimento imobiliario: sao fundos de investimento, mas
-# negociados em bolsa como acoes, por isso tem os mesmos dados diarios.
+# Fundos de investimento imobiliario negociados em bolsa
 FIIS = {
     "HGLG11": "CSHG Logistica",
     "KNRI11": "Kinea Renda Imobiliaria",
 }
-# Para ampliar a amostra depois, basta acrescentar tickers acima (ex.: BOVV11, PIBB11,
-# BRAX11, FIND11, MATB11, ISUS11; BBAS3, ABEV3; XPML11, MXRF11).
 
-# Series auxiliares: baixadas, mas NAO sao previstas pelos modelos.
-INDICE_VIX = "^VIX"       # "indice do medo" americano (usamos a variacao diaria)
-BENCHMARK = "^BVSP"       # Ibovespa, so para comparacao em graficos
+# Series auxiliares: baixadas, mas nao previstas pelos modelos.
+INDICE_VIX = "^VIX"       # volatilidade implicita do S&P 500 (usa-se a variacao diaria)
+BENCHMARK = "^BVSP"       # Ibovespa, apenas para comparacao em graficos
 
-# Filtros de entrada na amostra (criterios objetivos, descritos na metodologia)
-TOLERANCIA_DIAS = 30            # o ativo precisa ter dados ate 30 dias depois do inicio
-                                # e ate 30 dias antes do fim (historico completo)
+# Filtros de entrada na amostra. Observacao: sao avaliados no periodo inteiro, o que
+# introduz vies de sobrevivencia (discutido nas limitacoes da monografia).
+TOLERANCIA_DIAS = 30            # dados ate 30 dias depois do inicio e ate 30 dias antes do fim
 LIQUIDEZ_MINIMA = 1_000_000     # volume financeiro diario mediano minimo, em R$
-                                # (o "_" e so separador visual: 1_000_000 = 1000000)
 
 # ===========================================================================
 # DOWNLOAD
 # ===========================================================================
-MAX_WORKERS = 4          # quantos downloads acontecem ao mesmo tempo (concurrent.futures)
-TENTATIVAS = 3           # quantas vezes tentar de novo se a internet falhar
+MAX_WORKERS = 4          # downloads simultaneos (ThreadPoolExecutor)
+TENTATIVAS = 3           # tentativas por serie em caso de falha de rede
 
 # ===========================================================================
 # PROBLEMA DE CLASSIFICACAO
 # ===========================================================================
-# O modelo responde a pergunta: "o preco daqui a HORIZONTE pregoes sera maior que hoje?"
-# alvo = 1 (alta) se o retorno de t ate t+HORIZONTE for positivo; 0 (baixa) caso contrario.
-# HORIZONTE = 1 significa prever o proximo pregao (D+1).
-HORIZONTE = 1
+# alvo = 1 (alta) se o retorno de t ate t+HORIZONTE for positivo; 0 caso contrario.
+HORIZONTE = 1            # proximo pregao (D+1)
 
-# As "pistas" que o modelo recebe: 10 indicadores classicos de analise tecnica.
-# Cada nome corresponde a uma coluna calculada em 02_preparar_variaveis.py.
+# Variaveis de entrada: variacao do VIX e nove indicadores tecnicos
+# (colunas calculadas em 02_preparar_variaveis.py).
 VARIAVEIS_TECNICAS = ["vix_var", "cci", "macd", "williams_r", "stoch_smi", "trix",
                     "bollinger_pctb", "cmo", "dpo", "roc"]
 
-# Metricas extras de risco e retorno (extensao opcional, desligada por padrao).
+# Metricas de risco e retorno (extensao opcional, desligada).
 VARIAVEIS_RISCO_RETORNO = ["ret_5d", "ret_21d", "ret_63d", "ret_126d",
                            "vol_21d", "vol_63d", "vol_252d",
                            "dist_mm50", "dist_mm200", "drawdown_252d", "rsi_14"]
 
-# Conjuntos de variaveis a testar. Hoje so o de indicadores tecnicos esta ativo.
 CONJUNTOS = {
     "tecnicos": VARIAVEIS_TECNICAS,
-    # Extensao opcional: descomente para testar se risco e retorno acrescentam algo
     # "ampliado": VARIAVEIS_TECNICAS + VARIAVEIS_RISCO_RETORNO,
 }
-# Lista com todas as variaveis usadas em algum conjunto, sem repeticao.
-# dict.fromkeys(...) remove duplicatas mantendo a ordem original.
 TODAS_VARIAVEIS = list(dict.fromkeys(v for vs in CONJUNTOS.values() for v in vs))
 
-# Modelos comparados. Os hiperparametros (configuracoes internas de cada modelo) sao
-# fixados ANTES dos testes, sem busca automatica: assim nao ha como o modelo ser
-# "ajustado ao teste", o que inflaria os resultados.
+# Hiperparametros fixados antes dos testes, sem busca automatica, para reduzir o
+# risco de ajustar os modelos ao periodo de teste.
 MODELOS = ["logistica", "random_forest"]
-# Extensao opcional: acrescente "rede_neural" para incluir uma rede neural (MLP)
+# Extensao opcional: "rede_neural" (MLP)
 
 # ===========================================================================
-# VALIDACAO WALK-FORWARD
+# VALIDACAO WALK-FORWARD (janela expansiva)
 # ===========================================================================
-# Imagine um aluno que estuda o passado e faz provas sobre o futuro:
-#   - estuda os primeiros TREINO_INICIAL pregoes (~2 anos) e faz a prova dos
-#     JANELA_TESTE pregoes seguintes (~6 meses);
-#   - depois esses 6 meses entram no material de estudo e ele faz a prova dos
-#     proximos 6, e assim por diante ate o fim da amostra.
-# O modelo NUNCA ve o futuro do dia que esta prevendo.
-TREINO_INICIAL = 504     # ~2 anos de pregoes (cerca de 252 pregoes por ano)
+# Treino inicial de TREINO_INICIAL pregoes e teste nos JANELA_TESTE seguintes; a
+# janela testada entra no treino e o processo se repete ate o fim da amostra. Cada
+# janela de teste e prevista por um modelo treinado apenas com pregoes anteriores a ela.
+TREINO_INICIAL = 504     # ~2 anos de pregoes
 JANELA_TESTE = 126       # ~6 meses
 
-# Regime de volatilidade (calculado em 02): um dia e de volatilidade "alta" quando a
-# volatilidade dos ultimos 63 dias do ativo esta acima da mediana do seu proprio
-# passado ate o dia anterior. Serve para ver se os modelos funcionam melhor em
-# mercado calmo ou agitado.
+# Regime de volatilidade (calculado em 02): alta quando a volatilidade de 63 dias do
+# ativo supera a mediana do seu proprio historico ate o dia anterior.
 
-SEMENTE = 42             # semente aleatoria fixa: a Random Forest sorteia amostras;
-                         # fixando a semente, os resultados saem iguais a cada execucao
+SEMENTE = 42             # semente fixa (amostragem da Random Forest)
 
-CUSTO_POR_TROCA = 0.001  # 0,10% de custo a cada vez que o backtest troca de posicao
-                         # (sai do ativo para o CDI ou vice-versa)
+CUSTO_POR_TROCA = 0.001  # 0,10% por troca de posicao no backtest (ativo <-> CDI)
 
-# Sensibilidade aos custos: o backtest e refeito com cada um destes custos por troca.
-# 0,03% corresponde as tarifas da B3 para pessoa fisica (negociacao + liquidacao);
-# os valores maiores incluem spread e corretagem.
+# Sensibilidade aos custos por troca. 0,03% corresponde as tarifas da B3 para pessoa
+# fisica (negociacao + liquidacao); os valores maiores incluem spread e corretagem.
 CUSTOS_SENSIBILIDADE = [0.0, 0.0003, 0.0005, 0.001, 0.002]
 
-# Estrategias aleatorias de referencia: decidem ao acaso, a cada dia, se ficam no
-# ativo ou no CDI, com a MESMA proporcao de dias no ativo que o modelo. Servem para
-# saber se o resultado do backtest vem da previsao ou so da exposicao ao CDI.
+# Estrategias aleatorias de referencia: decidem ao acaso, a cada dia, entre o ativo e
+# o CDI, com a mesma proporcao de dias no ativo que o modelo. Separam o efeito da
+# previsao do efeito da exposicao ao CDI.
 N_ESTRATEGIAS_ALEATORIAS = 500
 
-# Bootstrap em blocos (robustez dos testes estatisticos): os testes binomial e de
-# McNemar supoem previsoes independentes, mas os dez ativos de um mesmo pregao se movem
-# juntos e dias proximos podem ser dependentes. O bootstrap sorteia BLOCOS de pregoes
-# consecutivos (com todos os ativos de cada pregao), preservando essas dependencias.
-BLOCO_BOOTSTRAP = 21       # pregoes por bloco (cerca de um mes)
-N_BOOTSTRAP = 2000         # numero de reamostragens
+# Bootstrap em blocos: os testes binomial e de McNemar supoem previsoes independentes,
+# mas os ativos de um mesmo pregao se movem juntos e dias proximos sao dependentes.
+# Sorteiam-se blocos de pregoes consecutivos (com todos os ativos de cada pregao).
+BLOCO_BOOTSTRAP = 21       # pregoes por bloco (~1 mes)
+N_BOOTSTRAP = 2000         # reamostragens
