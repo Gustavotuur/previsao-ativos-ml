@@ -1,11 +1,11 @@
 # Previsão de Movimentos de Ativos Financeiros com Machine Learning
 
 Trabalho de Conclusão de Curso, Bacharelado em Ciência da Computação, Universidade Veiga de Almeida (UVA), 2026.
-Autor: **Gustavo Pereira da Silva**. Orientadora: **Profa. Ana Maria dos Santos Vianna**.
+Autor: **Gustavo Pereira da Silva**. Orientadora: **Profa. MSc Ana Maria dos Santos Vianna**.
 
 Este sistema reprodutível prevê a direção do próximo pregão (alta ou baixa) de 10 ativos da B3 com **Regressão Logística** e **Random Forest**. Ele cobre todas as etapas:
 - coleta concorrente de dados públicos;
-- indicadores técnicos calculados com medidas para reduzir o vazamento temporal, com verificação automática;
+- dez variáveis explicativas (nove indicadores técnicos e a variação do VIX), calculadas com medidas para reduzir o vazamento temporal, com verificação automática;
 - avaliação por **validação walk-forward**;
 - testes estatísticos (binomial e McNemar);
 - uma **aplicação web em Streamlit**.
@@ -21,7 +21,7 @@ Yahoo Finance / Banco Central (SGS 12)
         │  01_baixar_dados.py      coleta concorrente (ThreadPoolExecutor)
         ▼
 dados/brutos/*.csv
-        │  02_preparar_variaveis.py   limpeza, filtros, 10 indicadores, alvo
+        │  02_preparar_variaveis.py   limpeza, filtros, 10 variáveis, alvo
         ▼
 dados/processados/dataset.parquet
         │  03_modelar.py           walk-forward, modelos, métricas, testes (joblib)
