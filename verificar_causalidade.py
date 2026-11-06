@@ -8,8 +8,8 @@ serie COMPLETA e de novo com a serie CORTADA na data (como se o futuro nao exist
 Se nenhuma variavel usa o futuro, os dois valores tem de ser identicos.
 
 Como controle, o script cria de proposito uma variavel que olha o futuro (o retorno do
-dia seguinte) e mostra que a verificacao a detecta. Isso prova que a verificacao
-funciona, e nao apenas que "passou".
+dia seguinte) e mostra que a verificacao a detecta, o que indica que o procedimento e
+capaz de identificar o uso de informacao futura.
 
 Uso (na pasta do projeto, com o .venv ativo):
     python verificar_causalidade.py

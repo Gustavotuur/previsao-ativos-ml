@@ -1,5 +1,5 @@
 """
-medir_desempenho.py - EVIDENCIA DE DESEMPENHO (capitulo de Desenvolvimento)
+medir_desempenho.py - MEDICAO DE DESEMPENHO DA COLETA E DA MODELAGEM
 ==========================================================================
 
 Mede o ganho das duas formas de paralelismo usadas no sistema:
@@ -9,7 +9,7 @@ Mede o ganho das duas formas de paralelismo usadas no sistema:
      Tarefa limitada pela CPU (CPU-bound) -> processos.
 
 Uso:  python medir_desempenho.py      (leva alguns minutos; rode depois do atualizar.py)
-Saida: resultados/desempenho.csv e um resumo na tela (tire um print para a monografia).
+Saida: resultados/desempenho.csv e um resumo na tela.
 
 Cuidados de medicao:
   - os downloads de teste vao para uma pasta TEMPORARIA, para nao sobrescrever os dados

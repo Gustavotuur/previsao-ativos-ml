@@ -21,8 +21,7 @@ resultados.
 Para atualizacao diaria automatica no Windows, agende  python atualizar.py --hoje  no
 Agendador de Tarefas (ex.: dias uteis as 19h, depois do fechamento da B3).
 """
-# Este arquivo so chama os outros scripts em sequencia, como se voce digitasse
-# "python 01_...", "python 02_..." etc. no terminal. Se um falhar, para tudo.
+# Executa as etapas em subprocessos, em sequencia; uma falha interrompe a execucao.
 import os
 import subprocess
 import sys
@@ -62,7 +61,6 @@ def main():
             print(f"\n===== {passo}: pulado =====")
             continue
         print(f"\n===== {passo} =====")
-        # sys.executable = o Python que esta rodando agora (o do .venv)
         r = subprocess.run([sys.executable, str(pasta / passo)], cwd=pasta, env=env)
         if r.returncode != 0:
             sys.exit(f"Falha em {passo}. Corrija o erro acima e rode de novo.")

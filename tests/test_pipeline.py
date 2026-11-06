@@ -72,7 +72,7 @@ def test_definicao_do_alvo(precos):
 
 
 # ---------------------------------------------------------------------------
-# 3. Walk-forward: treino sempre antes do teste, sem sobreposicao, cobrindo tudo
+# 3. Walk-forward: treino antes do teste, sem sobreposicao, do fim do treino inicial ao ultimo dia
 # ---------------------------------------------------------------------------
 def test_walk_forward(modelar):
     n = 2000

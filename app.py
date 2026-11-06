@@ -218,7 +218,7 @@ with aba_comp:
         st.bar_chart(imp.set_index("variavel")["importancia_rf"].sort_values())
 
 # ---------------------------------------------------------------------------
-# ABA 4: explicacao do metodo, em texto (st.markdown entende **negrito** etc.)
+# ABA 4: descricao do metodo
 with aba_metodo:
     st.markdown(f"""
 **Problema.** Classificar se o retorno do próximo pregão (D+{config.HORIZONTE}) será positivo

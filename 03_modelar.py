@@ -7,23 +7,21 @@ PERGUNTA DE PESQUISA
   pregao (D+1)? E essa vantagem se mantem ao longo dos anos, em mercados calmos e
   agitados e nos diferentes tipos de ativo?
 
-O QUE ESTE SCRIPT FAZ
-  1. Para cada ativo, roda a validacao WALK-FORWARD: treina os modelos no passado e
-     preve o periodo seguinte, avancando no tempo ate o fim da amostra.
-  2. Compara os modelos com LINHAS DE BASE (estrategias "burras"), porque so faz
-     sentido comemorar se o modelo acertar mais do que um chute bem informado:
-       - sempre alta:          preve sempre "sobe"
-       - classe majoritaria:   preve sempre o que foi mais frequente no treino
-       - persistencia:         preve que amanha sera igual a hoje (subiu -> sobe)
+ETAPAS
+  1. Validacao walk-forward por ativo: treino com pregoes anteriores e teste no bloco
+     seguinte, com janela expansiva, ate o fim da amostra.
+  2. Linhas de base:
+       - sempre alta:          preve alta em todos os pregoes
+       - classe majoritaria:   preve a classe mais frequente no treino de cada janela
+       - persistencia:         repete a direcao do pregao corrente
   3. Calcula metricas e testes estatisticos por segmento (geral, periodo, ano,
      tipo de ativo, regime de volatilidade).
-  4. Simula um BACKTEST: ficar no ativo quando o modelo preve alta e no CDI quando
-     preve baixa, pagando 0,10% a cada troca.
-  5. Treina os modelos com todo o historico e gera a previsao para o proximo pregao
-     (usada no site).
+  4. Backtest: posicao no ativo quando o modelo preve alta e no CDI quando preve
+     baixa, com custo de 0,10% por troca de posicao.
+  5. Ajuste final com todo o historico rotulado e previsao do pregao seguinte
+     (exibida na aplicacao).
 
-Os hiperparametros dos modelos sao FIXOS (definidos antes de ver qualquer resultado),
-para nao haver "ajuste ao teste".
+Hiperparametros fixados antes dos testes, sem busca automatica.
 
 Arquivos gerados em resultados/:
   previsoes.parquet            a previsao de cada modelo em cada dia de teste
@@ -38,17 +36,17 @@ Arquivos gerados em resultados/:
   backtest_sensibilidade.csv   retorno do backtest com diferentes custos por troca
   backtest_aleatorio.csv       modelo comparado com estrategias aleatorias de mesma exposicao
   bootstrap_blocos.csv         diferencas de acuracia com bootstrap em blocos de pregoes
-  importancia_variaveis.csv    quais indicadores cada modelo mais usou
+  importancia_variaveis.csv    importancia (RF) e coeficientes medios (RL) das variaveis
   previsao_atual.csv           previsao para o proximo pregao
 """
 import time
 import warnings
-from itertools import combinations   # gera todos os pares possiveis de uma lista
+from itertools import combinations
 
 import numpy as np
 import pandas as pd
-from joblib import Parallel, delayed  # roda varios ativos ao mesmo tempo (varios nucleos)
-from scipy.stats import binomtest     # teste binomial (usado tambem para o McNemar)
+from joblib import Parallel, delayed
+from scipy.stats import binomtest     # teste binomial e McNemar exato
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression
@@ -60,13 +58,12 @@ from sklearn.preprocessing import StandardScaler
 
 import config
 
-# Nomes "bonitos" para as tabelas
+# Nomes exibidos nas tabelas
 NOME_MODELO = {"logistica": "Regressao Logistica", "random_forest": "Random Forest",
                "rede_neural": "Rede Neural (MLP)"}
 BASES = {"sempre_alta": "Sempre alta", "majoritaria": "Classe majoritaria",
          "persistencia": "Persistencia"}
-# Cada combinacao conjunto x modelo vira uma "chave", ex.: "tecnicos__logistica".
-# (list comprehension: monta a lista percorrendo os dois loops)
+# Chave de cada combinacao conjunto x modelo, ex.: "tecnicos__logistica"
 CHAVES = [f"{c}__{m}" for c in config.CONJUNTOS for m in config.MODELOS]
 
 
@@ -74,29 +71,21 @@ CHAVES = [f"{c}__{m}" for c in config.CONJUNTOS for m in config.MODELOS]
 # OS MODELOS
 # ===========================================================================
 def novo_modelo(nome):
-    """Cria um modelo NOVO (ainda nao treinado) com hiperparametros fixos."""
+    """Modelo nao treinado, com hiperparametros fixos."""
     if nome == "logistica":
-        # Pipeline = "linha de montagem": primeiro padroniza as variaveis
-        # (StandardScaler deixa cada uma com media 0 e desvio 1, para que indicadores
-        # com escalas diferentes, como CCI ~100 e ROC ~0,01, pesem de forma comparavel)
-        # e depois aplica a Regressao Logistica.
-        # A Logistica calcula uma soma ponderada dos indicadores e a transforma numa
-        # probabilidade entre 0 e 1 (funcao sigmoide).
+        # Padronizacao (media 0, desvio 1) ajustada so com o treino de cada janela, para
+        # que variaveis em escalas diferentes (CCI ~100, ROC ~0,01) sejam comparaveis.
+        # Regularizacao L2 com C = 1 (padrao do scikit-learn).
         return make_pipeline(StandardScaler(), LogisticRegression(max_iter=2000))
     if nome == "random_forest":
-        # Random Forest = 300 arvores de decisao, cada uma treinada com uma amostra
-        # sorteada dos dados e um subconjunto sorteado de indicadores; no fim, votam.
-        #   max_depth=5          cada arvore faz no maximo 5 perguntas em sequencia
-        #   min_samples_leaf=50  cada "folha" (resposta final) precisa de >= 50 dias
-        #   max_features="sqrt"  cada divisao sorteia ~raiz(10) = 3 indicadores
-        # Arvores rasas e folhas grandes evitam "decorar" o ruido do mercado (overfitting).
-        # Arvores nao precisam de padronizacao, por isso nao ha StandardScaler aqui.
+        # Arvores rasas (profundidade 5) e folhas com pelo menos 50 observacoes limitam o
+        # sobreajuste ao ruido; "sqrt" sorteia 3 das 10 variaveis em cada divisao.
+        # Arvores nao dependem da escala das variaveis (sem padronizacao).
         return RandomForestClassifier(n_estimators=300, max_depth=5, min_samples_leaf=50,
                                       max_features="sqrt", n_jobs=1,
                                       random_state=config.SEMENTE)
     if nome == "rede_neural":
-        # (extensao opcional) Rede neural com 1 camada oculta de 10 neuronios e
-        # otimizador quasi-Newton L-BFGS.
+        # Extensao opcional (desativada): MLP com 1 camada oculta de 10 neuronios, L-BFGS.
         return make_pipeline(StandardScaler(), MLPClassifier(
             hidden_layer_sizes=(10,), alpha=0.01, solver="lbfgs", max_iter=2000,
             random_state=config.SEMENTE))
@@ -107,71 +96,59 @@ def novo_modelo(nome):
 # VALIDACAO WALK-FORWARD
 # ===========================================================================
 def walk_forward(n):
-    """Gera as janelas (fold, linhas_de_treino, linhas_de_teste) para uma serie de n dias.
+    """Gera (fold, indices_de_treino, indices_de_teste) com janela expansiva.
 
-    Exemplo com TREINO_INICIAL=504 e JANELA_TESTE=126:
-      fold 0: treino = dias 0..503    teste = dias 504..629
-      fold 1: treino = dias 0..629    teste = dias 630..755
-      ...
-    O treino sempre comeca no dia 0 e vai crescendo ("janela expansiva").
-
-    "yield" transforma a funcao num gerador: ela entrega uma janela por vez,
-    a cada volta do "for" que a usa.
+    Com TREINO_INICIAL=504, JANELA_TESTE=126 e h=1:
+      fold 0: treino = 0..503    teste = 504..629
+      fold 1: treino = 0..629    teste = 630..755
     """
     h, inicio, fold = config.HORIZONTE, config.TREINO_INICIAL, 0
     while inicio < n:
         fim = min(inicio + config.JANELA_TESTE, n)
         # O alvo do dia i depende do preco do dia i+h. Para o treino nao conter nenhuma
         # informacao do periodo de teste, so entram dias com i+h <= inicio.
-        # np.arange(a, b) = [a, a+1, ..., b-1]
         yield fold, np.arange(0, inicio - h + 1), np.arange(inicio, fim)
         inicio, fold = fim, fold + 1
 
 
 def modelar_ativo(df, ultimo):
-    """Roda o walk-forward completo para UM ativo.
+    """Walk-forward de um ativo.
 
-    df     = todas as linhas desse ativo no dataset
-    ultimo = a linha do ultimo dia (para a previsao "de hoje")
-    Devolve: (previsoes nos dias de teste, importancias das variaveis, previsao atual)
+    Devolve (previsoes nos dias de teste, importancias/coeficientes por janela,
+    previsao do pregao seguinte ao ultimo dia).
     """
     warnings.filterwarnings("ignore", category=ConvergenceWarning)
-    df = df.sort_values("data").reset_index(drop=True)   # ordem cronologica, indice 0..n-1
-    y = df["alvo"].astype(int).values                    # a resposta certa (0 ou 1)
+    df = df.sort_values("data").reset_index(drop=True)   # ordem cronologica
+    y = df["alvo"].astype(int).values
     saidas, imps = [], []
 
     for fold, tr, te in walk_forward(len(df)):
-        if len(np.unique(y[tr])) < 2:     # treino so com altas (ou so quedas): impossivel
+        if len(np.unique(y[tr])) < 2:     # treino com uma unica classe
             continue
-        # tabela de saida: informacoes dos dias de teste
         out = df.loc[te, ["data", "ativo", "tipo", "periodo", "regime_vol", "alvo",
                           "ret_futuro", "cdi_futuro"]].copy()
         out["fold"] = fold
 
         for conj, variaveis in config.CONJUNTOS.items():
-            X = df[variaveis].values      # matriz de indicadores (linhas = dias)
+            X = df[variaveis].values
             for m in config.MODELOS:
-                # .fit(...) TREINA o modelo SO com as linhas de treino
-                mod = novo_modelo(m).fit(X[tr], y[tr])
-                # .predict_proba(...) devolve [prob_baixa, prob_alta] para cada dia de teste;
-                # [:, 1] pega a coluna da probabilidade de ALTA
-                prob = mod.predict_proba(X[te])[:, 1]
+                mod = novo_modelo(m).fit(X[tr], y[tr])          # ajuste so com o treino
+                prob = mod.predict_proba(X[te])[:, 1]           # probabilidade de alta
                 out[f"prob_{conj}__{m}"] = prob
-                out[f"pred_{conj}__{m}"] = (prob >= 0.5).astype(int)   # >= 50% -> preve alta
-                # guarda o que cada modelo "aprendeu" sobre os indicadores
+                out[f"pred_{conj}__{m}"] = (prob >= 0.5).astype(int)   # limiar de 0,5
                 if m == "random_forest":
                     imps.append(("rf", conj, pd.Series(mod.feature_importances_, variaveis)))
                 elif m == "logistica":
-                    # mod[-1] = ultimo passo do pipeline (a regressao); coef_ = pesos
+                    # coeficientes da regressao (variaveis padronizadas)
                     imps.append(("lr", conj, pd.Series(mod[-1].coef_[0], variaveis)))
 
         # linhas de base
         out["pred_sempre_alta"] = 1
         out["pred_majoritaria"] = int(y[tr].mean() >= 0.5)                 # moda do treino
-        out["pred_persistencia"] = (df.loc[te, "roc"].values > 0).astype(int)  # hoje subiu?
+        out["pred_persistencia"] = (df.loc[te, "roc"].values > 0).astype(int)  # direcao de t
         saidas.append(out)
 
-    # previsao para o PROXIMO pregao: modelos treinados com TODO o historico conhecido
+    # previsao do pregao seguinte ao ultimo dia: ajuste com todo o historico rotulado
     atual = {}
     if not ultimo.empty:
         atual = {"ativo": df["ativo"].iloc[0], "data_referencia": ultimo["data"].iloc[0].date()}
@@ -197,13 +174,12 @@ def rotulo(chave):
 def metricas(g):
     """Calcula as metricas de todos os modelos e linhas de base num grupo de previsoes g.
 
-    acuracia             % de dias em que acertou a direcao
-    acuracia_balanceada  media do acerto nas altas e nas quedas (justa se houver mais altas)
-    precisao             quando previu alta, % de vezes que subiu mesmo
-    recall               dos dias que subiram, % que o modelo previu como alta
+    acuracia             proporcao de acertos da direcao
+    acuracia_balanceada  media da sensibilidade e da especificidade
+    precisao             entre as previsoes de alta, proporcao de altas observadas
+    recall               entre as altas observadas, proporcao prevista como alta
     f1                   media harmonica de precisao e recall
-    auc                  capacidade de ordenar dias de alta acima dos de queda pela
-                         probabilidade (0,5 = acaso; 1,0 = perfeito)
+    auc                  area sob a curva ROC das probabilidades (0,5 = ordenacao ao acaso)
     p_valor_vs_sempre_alta  teste binomial unilateral: probabilidade de acertar pelo menos
                          tanto quanto acertou se a taxa de acerto verdadeira fosse a de
                          "sempre alta" (nao e a probabilidade de ter vencido por sorte)
@@ -221,11 +197,10 @@ def metricas(g):
                "recall": recall_score(y, p, zero_division=0),
                "f1": f1_score(y, p, zero_division=0),
                "auc": np.nan, "p_valor_vs_sempre_alta": np.nan}
-        if chave in CHAVES:                 # AUC e p-valor so para os modelos de verdade
+        if chave in CHAVES:                 # AUC e p-valor apenas para os classificadores
             if y.nunique() == 2:
                 lin["auc"] = roc_auc_score(y, g[f"prob_{chave}"])
-            # H0 (hipotese nula): a taxa de acerto do modelo e igual a de "sempre alta".
-            # "greater" = teste unilateral: so interessa se o modelo for MELHOR.
+            # H0: taxa de acerto igual a de "sempre alta"; H1 (unilateral): maior.
             lin["p_valor_vs_sempre_alta"] = binomtest(int((p == y).sum()), len(y), acc_base,
                                                       alternative="greater").pvalue
         linhas.append(lin)
@@ -235,11 +210,9 @@ def metricas(g):
 def mcnemar(g, a, b):
     """Teste exato de McNemar entre os modelos a e b (Dietterich, 1998).
 
-    Ideia: dias em que os DOIS acertam ou os DOIS erram nao dizem nada sobre quem e
-    melhor. So importam os dias em que UM acertou e o OUTRO errou. Se os modelos fossem
-    equivalentes, esses dias se dividiriam meio a meio (como cara ou coroa). O p-valor
-    e a probabilidade de uma divisao tao desigual quanto a observada, ou mais, caso os
-    modelos fossem de fato equivalentes.
+    Usa apenas os casos discordantes (um modelo acerta e o outro erra). Sob H0 (modelos
+    equivalentes), eles se dividem com probabilidade 0,5; o p-valor bilateral e a
+    probabilidade de uma divisao tao desigual quanto a observada, ou mais, sob H0.
     """
     y = g["alvo"].astype(int)
     acerta_a, acerta_b = g[f"pred_{a}"] == y, g[f"pred_{b}"] == y
@@ -252,30 +225,27 @@ def mcnemar(g, a, b):
 
 
 def backtest(g):
-    """Simulacao financeira: fica no ativo se o modelo preve alta; senao, fica no CDI.
+    """Backtest: posicao no ativo se o modelo preve alta; caso contrario, no CDI.
 
-    pos = 1 (comprado no ativo) ou 0 (no caixa, rendendo CDI).
-    retorno do dia = pos x retorno do ativo + (1 - pos) x CDI - custo das trocas.
+    retorno = pos x retorno do ativo + (1 - pos) x CDI - trocas x custo, com pos em {0, 1}.
     """
     g = g.sort_values("data").iloc[::config.HORIZONTE]   # periodos sem sobreposicao
     anual = 252 / config.HORIZONTE                       # periodos por ano
     curvas, linhas = {"data": g["data"].values}, []
-    # Estrategias comparadas: duas de referencia + uma por modelo
     estrategias = [("Comprar e manter", None), ("CDI", "cdi")] + \
                   [(f"{rotulo(k)[1]} [{rotulo(k)[0]}]", k) for k in CHAVES]
     for nome, chave in estrategias:
         if chave is None:
-            pos = pd.Series(1, index=g.index)      # sempre no ativo
+            pos = pd.Series(1, index=g.index)      # comprar e manter
         elif chave == "cdi":
-            pos = pd.Series(0, index=g.index)      # sempre no caixa
+            pos = pd.Series(0, index=g.index)
         else:
-            pos = g[f"pred_{chave}"]               # segue o modelo
-        # numero de trocas: 1 sempre que a posicao muda de um dia para o outro
+            pos = g[f"pred_{chave}"]
+        # trocas de posicao, incluindo a entrada inicial; referencias sem custo
         trocas = pos.diff().abs().fillna(pos.iloc[0]) if chave not in (None, "cdi") else 0
         ret = pos * g["ret_futuro"] + (1 - pos) * g["cdi_futuro"] - trocas * config.CUSTO_POR_TROCA
-        patrimonio = (1 + ret).cumprod()           # R$ 1 investido no inicio vira quanto?
+        patrimonio = (1 + ret).cumprod()
         excesso, anos = ret - g["cdi_futuro"], len(ret) / anual
-        # mesma estrategia sem custo de troca: mostra o quanto os custos pesam no resultado
         ret_sem_custo = pos * g["ret_futuro"] + (1 - pos) * g["cdi_futuro"]
         linhas.append({
             "estrategia": nome,
@@ -283,9 +253,9 @@ def backtest(g):
             "retorno_anual": patrimonio.iloc[-1] ** (1 / anos) - 1,
             "retorno_anual_sem_custo": (1 + ret_sem_custo).prod() ** (1 / anos) - 1,
             "volatilidade_anual": ret.std() * np.sqrt(anual),
-            # Sharpe: retorno acima do CDI por unidade de risco (quanto maior, melhor)
+            # Sharpe: media do retorno em excesso ao CDI / desvio do retorno, anualizado
             "sharpe": excesso.mean() / ret.std() * np.sqrt(anual) if ret.std() > 0 else np.nan,
-            # drawdown maximo: a pior queda desde um pico (o "susto" maximo)
+            # drawdown maximo: maior queda a partir de um pico do patrimonio
             "drawdown_maximo": (patrimonio / patrimonio.cummax() - 1).min(),
             "tempo_no_ativo": pos.mean(),
             "trocas": int(pos.diff().abs().sum()),
@@ -304,7 +274,7 @@ def retorno_anual(pos, g, custo):
 
 
 def sensibilidade_custos(g):
-    """Refaz o backtest de cada modelo com cada custo de config.CUSTOS_SENSIBILIDADE."""
+    """Retorno anualizado de cada modelo para cada custo de config.CUSTOS_SENSIBILIDADE."""
     g = g.sort_values("data").iloc[::config.HORIZONTE]
     manter = retorno_anual(np.ones(len(g)), g, 0.0)
     cdi = retorno_anual(np.zeros(len(g)), g, 0.0)
@@ -320,10 +290,9 @@ def sensibilidade_custos(g):
 
 
 def estrategias_aleatorias(g, semente):
-    """Compara o modelo (sem custos) com estrategias aleatorias de mesma exposicao.
+    """Compara o modelo (sem custos) com estrategias aleatorias de mesma exposicao esperada.
 
-    percentil = % das estrategias aleatorias que o modelo superou. Perto de 50% significa
-    que o modelo se comportou como uma escolha ao acaso com o mesmo tempo no ativo.
+    percentil = fracao das estrategias aleatorias com retorno inferior ao do modelo.
     """
     g = g.sort_values("data").iloc[::config.HORIZONTE]
     rng = np.random.default_rng(semente)
@@ -348,9 +317,8 @@ def bootstrap_blocos(g, a, b, semente):
 
     Os acertos sao somados por pregao (todos os ativos daquele dia juntos) e os pregoes
     sao reamostrados em blocos consecutivos de config.BLOCO_BOOTSTRAP (bootstrap em blocos
-    moveis). Assim, a correlacao entre ativos no mesmo dia e entre dias proximos e
-    preservada, e o erro-padrao nao fica subestimado como nos testes que supoem
-    independencia.
+    moveis), preservando a dependencia entre ativos no mesmo dia e entre dias proximos,
+    que os testes binomial e de McNemar ignoram.
     """
     y = g["alvo"].astype(int)
     dia = pd.DataFrame({"data": g["data"].values,
@@ -366,7 +334,7 @@ def bootstrap_blocos(g, a, b, semente):
     inicios = rng.integers(0, T - L + 1, size=(config.N_BOOTSTRAP, k))
     idx = (inicios[:, :, None] + np.arange(L)).reshape(config.N_BOOTSTRAP, -1)[:, :T]
     reamostras = dif_dia[idx].sum(axis=1) / n_dia[idx].sum(axis=1)
-    centradas = reamostras - observada                         # distribuicao sob H0
+    centradas = reamostras - observada                         # aproximacao da distribuicao sob H0
     return {"diferenca": observada,
             "erro_padrao": reamostras.std(ddof=1),
             "ic95_inf": np.percentile(reamostras, 2.5),
@@ -389,13 +357,10 @@ def main():
           f"(em paralelo; pode levar alguns minutos)...")
 
     # ---- 1. WALK-FORWARD DE TODOS OS ATIVOS EM PARALELO ----
-    # Parallel(n_jobs=-1) usa todos os nucleos do processador; delayed(f)(args) agenda f(args).
-    # Diferente do download (threads, que esperam a rede), aqui o trabalho e CALCULO,
-    # entao usamos processos em nucleos diferentes.
+    # Tarefa limitada por CPU: um processo por ativo (joblib), em todos os nucleos.
     res = Parallel(n_jobs=-1, verbose=5)(
         delayed(modelar_ativo)(dados[dados["ativo"] == a], ultimo[ultimo["ativo"] == a])
         for a in ativos)
-    # res = lista com um resultado (previsoes, importancias, atual) por ativo
 
     prev = pd.concat([r[0] for r in res if not r[0].empty], ignore_index=True)
     prev.to_parquet(config.RESULTADOS / "previsoes.parquet", index=False)
@@ -405,7 +370,7 @@ def main():
     # ---- 2. IMPORTANCIA DAS VARIAVEIS (media sobre todos os folds e ativos) ----
     imp = {}
     for tipo, conj, s in (x for r in res for x in r[1]):
-        imp.setdefault((tipo, conj), []).append(s)   # agrupa por (modelo, conjunto)
+        imp.setdefault((tipo, conj), []).append(s)
     tab_imp = []
     for conj in config.CONJUNTOS:
         rf = pd.concat(imp[("rf", conj)], axis=1).mean(axis=1)
@@ -416,7 +381,6 @@ def main():
         .to_csv(config.RESULTADOS / "importancia_variaveis.csv", index=False)
 
     # ---- 3. METRICAS POR SEGMENTO ----
-    # groupby("coluna") separa as previsoes em grupos (ex.: validacao / reservado)
     segmentos = [("geral", "todos", prev)]
     segmentos += [("periodo", k, g) for k, g in prev.groupby("periodo")]
     segmentos += [("tipo", k, g) for k, g in prev.groupby("tipo")]
@@ -436,8 +400,7 @@ def main():
     comp = []
     for conj in config.CONJUNTOS:
         chaves = [f"{conj}__{m}" for m in config.MODELOS]
-        for a, b in combinations(chaves, 2):        # todos os pares (hoje: LR x RF)
-            # "*" desempacota as listas dentro da lista principal
+        for a, b in combinations(chaves, 2):        # pares de modelos (LR x RF)
             for seg, val, g in [("geral", "todos", prev),
                                 *[("periodo", k, x) for k, x in prev.groupby("periodo")],
                                 *[("ano", str(k), x) for k, x in prev.groupby("ano")],
@@ -465,7 +428,7 @@ def main():
     pd.DataFrame(estab, columns=["conjunto", "nivel", "grupos", "rf_melhor",
                                  "diferenca_media_pp"]).to_csv(config.RESULTADOS / "estabilidade.csv", index=False)
 
-    # ---- 6. MATRIZES DE CONFUSAO (quais erros sao mais frequentes) ----
+    # ---- 6. MATRIZES DE CONFUSAO ----
     #                    previu baixa        previu alta
     # caiu de verdade    verdadeiro_baixa    falso_alta
     # subiu de verdade   falsa_baixa         verdadeira_alta
@@ -491,7 +454,7 @@ def main():
     pd.concat(bts).to_csv(config.RESULTADOS / "backtest_por_ativo.csv", index=False)
     pd.concat(curvas).to_parquet(config.RESULTADOS / "curvas_backtest.parquet", index=False)
 
-    # ---- 7a. BOOTSTRAP EM BLOCOS: robustez dos testes a dependencia entre previsoes ----
+    # ---- 7a. BOOTSTRAP EM BLOCOS ----
     pares = [(k, "sempre_alta") for k in CHAVES]
     pares += [(CHAVES[i], CHAVES[j]) for i in range(len(CHAVES)) for j in range(i + 1, len(CHAVES))]
     segmentos = [("geral", "todos", prev)]
@@ -510,7 +473,7 @@ def main():
 
     # ---- 7b. SENSIBILIDADE AOS CUSTOS E ESTRATEGIAS ALEATORIAS (todo o teste) ----
     sens, alea = [], []
-    for i, (a, g) in enumerate(prev.groupby("ativo")):   # ordem alfabetica: semente estavel
+    for i, (a, g) in enumerate(prev.groupby("ativo")):   # ordem fixa: sementes reprodutiveis
         sens.append(sensibilidade_custos(g).assign(ativo=a, tipo=g["tipo"].iloc[0]))
         alea.append(estrategias_aleatorias(g, config.SEMENTE + i).assign(ativo=a, tipo=g["tipo"].iloc[0]))
     sens = pd.concat(sens)
