@@ -25,6 +25,22 @@ _MOD = {"logistica": "Regressão Logística", "random_forest": "Random Forest",
         "rede_neural": "Rede Neural (MLP)"}
 NOME_MOD = {m: _MOD[m] for m in config.MODELOS}
 NOME_TIPO = {"etf": "ETF", "acao": "Ação", "fii": "FII"}
+# Os arquivos de resultados usam nomes sem acento; a tela mostra a forma acentuada
+ACENTOS = {"Regressao Logistica": "Regressão Logística", "Classe majoritaria": "Classe majoritária",
+           "Persistencia": "Persistência"}
+ACENTOS_NOMES = {"Logistica": "Logística", "petroleo": "petróleo", "mineracao": "mineração",
+                 "Itau": "Itaú", "Imobiliaria": "Imobiliária"}
+BR = {"decimal": ",", "thousands": "."}   # formato numerico brasileiro nas tabelas
+
+
+def acentuar(df):
+    """Troca os nomes de modelos e estrategias pela forma acentuada."""
+    for col in ("modelo", "modelo_a", "modelo_b", "estrategia"):
+        if col in df.columns:
+            df[col] = df[col].replace(ACENTOS, regex=True)
+    if "nome" in df.columns:
+        df["nome"] = df["nome"].replace(ACENTOS_NOMES, regex=True)
+    return df.rename(columns=lambda c: next((c.replace(a, b) for a, b in ACENTOS.items() if a in c), c))
 
 
 @st.cache_data
@@ -46,8 +62,15 @@ def carregar():
         "atual": pd.read_csv(r / "previsao_atual.csv"),
         "previsoes": pd.read_parquet(r / "previsoes.parquet"),
     }
+    d = {k: acentuar(v) for k, v in d.items()}
     arq = config.DADOS_BRUTOS / "ultima_atualizacao.txt"
-    d["atualizado"] = arq.read_text(encoding="utf-8") if arq.exists() else "desconhecida"
+    d["atualizado"] = "desconhecida"
+    if arq.exists():
+        texto = arq.read_text(encoding="utf-8").strip()
+        try:
+            d["atualizado"] = pd.Timestamp(texto).strftime("%d/%m/%Y %H:%M")
+        except ValueError:
+            d["atualizado"] = texto
     return d
 
 
@@ -107,7 +130,7 @@ with aba_prev:
     tab["Consenso"] = [f"alta ({v}/{n_mod})" if v > n_mod / 2 else
                        f"baixa ({n_mod - v}/{n_mod})" if v < n_mod / 2 else "dividido"
                        for v in votos]
-    st.dataframe(tab.style.format({n: "{:.1%}" for n in NOME_MOD.values()})
+    st.dataframe(tab.style.format({n: "{:.1%}" for n in NOME_MOD.values()}, **BR)
                  .background_gradient(subset=list(NOME_MOD.values()), cmap="RdBu", vmin=0.3, vmax=0.7),
                  width="stretch", hide_index=True)
     st.caption(f"Modelos treinados com o histórico disponível até {br(REFERENCIA)}. "
@@ -126,7 +149,7 @@ with aba_prev:
         lin["Sempre alta"] = (g["alvo"] == 1).mean()
         linhas.append(lin)
     cols_pct = list(NOME_MOD.values()) + ["Sempre alta"]
-    st.dataframe(pd.DataFrame(linhas).style.format({c: "{:.1%}" for c in cols_pct}),
+    st.dataframe(pd.DataFrame(linhas).style.format({c: "{:.1%}" for c in cols_pct}, **BR),
                  width="stretch", hide_index=True)
     st.caption(f"Janelas contadas para trás a partir do último pregão com resultado "
                f"conhecido ({br(fim)}).")
@@ -144,7 +167,7 @@ with aba_ativo:
         st.subheader(f"Previsão para o pregão seguinte a {br(a['data_referencia'].iloc[0])}")
         for col, (m, nome) in zip(st.columns(len(NOME_MOD)), NOME_MOD.items()):
             p = a[f"prob_alta_{conj}__{m}"].iloc[0]
-            col.metric(nome, "ALTA" if p >= 0.5 else "BAIXA", f"prob. de alta {p:.1%}",
+            col.metric(nome, "ALTA" if p >= 0.5 else "BAIXA", "prob. de alta " + f"{p:.1%}".replace(".", ","),
                        delta_color="off")
 
     st.subheader("Preço e média móvel de 200 pregões")
@@ -157,7 +180,7 @@ with aba_ativo:
     met = D["por_ativo"][(D["por_ativo"]["ativo"] == escolha)
                          & D["por_ativo"]["conjunto"].isin([conj, "-"])]
     met = met.drop(columns=["ativo", "tipo", "conjunto"]).set_index("modelo")
-    st.dataframe(met.style.format({c: "{:.3f}" for c in met.columns if c != "n"}), width="stretch")
+    st.dataframe(met.style.format({c: "{:.3f}" for c in met.columns if c != "n"}, **BR), width="stretch")
 
     st.subheader("Backtest: no ativo quando o modelo prevê alta, senão CDI")
     curva = D["curvas"][D["curvas"]["ativo"] == escolha].drop(columns="ativo").set_index("data")
@@ -168,9 +191,9 @@ with aba_ativo:
     st.dataframe(bt.drop(columns=["ativo", "tipo"]).set_index(["periodo", "estrategia"]).style.format({
         "retorno_total": "{:.1%}", "retorno_anual": "{:.1%}", "retorno_anual_sem_custo": "{:.1%}",
         "volatilidade_anual": "{:.1%}",
-        "sharpe": "{:.2f}", "drawdown_maximo": "{:.1%}", "tempo_no_ativo": "{:.0%}"}),
+        "sharpe": "{:.2f}", "drawdown_maximo": "{:.1%}", "tempo_no_ativo": "{:.0%}"}, **BR),
         width="stretch")
-    st.caption(f"Custo de {config.CUSTO_POR_TROCA:.2%} por troca. Execução suposta no fechamento "
+    st.caption(f"Custo de {config.CUSTO_POR_TROCA:.2%}".replace(".", ",") + " por troca. Execução suposta no fechamento "
                "do dia da previsão; na prática seria no pregão seguinte.")
 
 # ---------------------------------------------------------------------------
@@ -179,28 +202,32 @@ with aba_comp:
     def tabela(seg):
         r = D["resumo"][(D["resumo"]["segmento"] == seg)
                         & D["resumo"]["conjunto"].isin([conj, "-"])]
-        return r.pivot(index="modelo", columns="valor", values="acuracia")
+        rotulos = {"validacao": "Validação", "reservado": "Reservado", "acao": "Ação", "etf": "ETF",
+                   "fii": "FII", "alta": "Volatilidade alta", "baixa": "Volatilidade baixa"}
+        return (r.pivot(index="modelo", columns="valor", values="acuracia")
+                .rename(columns=rotulos).rename_axis(index="Modelo", columns=None))
 
     st.subheader("Acurácia: período de validação x período reservado")
-    st.dataframe(tabela("periodo").style.format("{:.2%}"), width="stretch")
+    st.dataframe(tabela("periodo").style.format("{:.2%}", **BR), width="stretch")
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("Por tipo de ativo")
-        st.dataframe(tabela("tipo").style.format("{:.2%}"), width="stretch")
+        st.dataframe(tabela("tipo").style.format("{:.2%}", **BR), width="stretch")
     with c2:
         st.subheader("Por regime de volatilidade")
-        st.dataframe(tabela("regime_vol").style.format("{:.2%}"), width="stretch")
+        st.dataframe(tabela("regime_vol").style.format("{:.2%}", **BR), width="stretch")
 
     st.subheader("Robustez no tempo: acurácia por ano")
     pa = D["por_ano"][D["por_ano"]["conjunto"].isin([conj, "-"])]
+    pa = pa.assign(ano=pa["ano"].astype(str))          # ano como rotulo, nao como numero
     st.line_chart(pa.pivot(index="ano", columns="modelo", values="acuracia"))
 
     st.subheader("A Random Forest supera a Regressão Logística? (teste de McNemar)")
     cp = D["comparacao"]
-    cp = cp[(cp["conjunto"] == conj) & (cp["modelo_a"] == "Regressao Logistica")
+    cp = cp[(cp["conjunto"] == conj) & (cp["modelo_a"] == "Regressão Logística")
             & (cp["modelo_b"] == "Random Forest")]
     st.dataframe(cp.drop(columns=["conjunto", "modelo_a", "modelo_b"]).style.format(
-        {"acuracia_a": "{:.2%}", "acuracia_b": "{:.2%}", "p_valor_mcnemar": "{:.4f}"}),
+        {"acuracia_a": "{:.2%}", "acuracia_b": "{:.2%}", "p_valor_mcnemar": "{:.4f}"}, **BR),
         width="stretch", hide_index=True)
     st.caption("acuracia_a = Logística, acuracia_b = Random Forest. p < 0,05 indica diferença "
                "significativa entre os dois modelos naquele recorte.")
@@ -224,8 +251,8 @@ with aba_metodo:
 **Problema.** Classificar se o retorno do próximo pregão (D+{config.HORIZONTE}) será positivo
 (alta) ou não (baixa): um problema de classificação binária supervisionada.
 
-**Amostra.** ETFs, ações e FIIs da B3 com histórico de {config.DATA_INICIO} a {config.DATA_FIM}
-e volume financeiro diário mediano de pelo menos R$ {config.LIQUIDEZ_MINIMA:,.0f}.
+**Amostra.** ETFs, ações e FIIs da B3 com histórico de {br(config.DATA_INICIO)} a {br(config.DATA_FIM)}
+e volume financeiro diário mediano de pelo menos R$ {format(config.LIQUIDEZ_MINIMA, ',.0f').replace(',', '.')}.
 Dados: Yahoo Finance (preços ajustados), VIX e CDI (Banco Central, SGS 12).
 
 **Variáveis.** Variação do VIX e nove indicadores técnicos clássicos (CCI, MACD normalizado (PPO), Williams %R, estocástico,
@@ -234,11 +261,11 @@ Foram calculadas para usar apenas informação disponível no fechamento do dia 
 o que é conferido por um teste automatizado; o VIX entra com um dia de defasagem, porque o
 mercado americano fecha depois da B3.
 
-**Modelos.** {", ".join(NOME_MOD.values())}, com hiperparâmetros fixados antes dos testes.
+**Modelos.** {" e ".join(NOME_MOD.values())}, com hiperparâmetros fixados antes dos testes.
 
 **Validação.** Walk-forward com janela expansiva: primeiro treino de {config.TREINO_INICIAL}
 pregões, testes sucessivos de {config.JANELA_TESTE}. O período a partir de
-{config.INICIO_RESERVADO} é reservado e reportado separadamente.
+{br(config.INICIO_RESERVADO)} é reservado e reportado separadamente.
 
 **Comparações.** Linhas de base (sempre alta, classe majoritária, persistência), teste
 binomial contra "sempre alta" e teste de McNemar entre modelos, no geral, por ano e por
