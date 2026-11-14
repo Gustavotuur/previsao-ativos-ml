@@ -99,6 +99,7 @@ Versões instaladas no ambiente em que os resultados da monografia foram gerados
 | requests | 2.34.2 |
 | certifi | 2026.10.23 |
 | pyarrow | 26.0.0 |
+| openpyxl | 3.1.5 |
 | matplotlib | 3.11.2 |
 | seaborn | 0.13.2 |
 | streamlit | 1.66.1 |
