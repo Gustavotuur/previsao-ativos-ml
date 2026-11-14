@@ -47,6 +47,7 @@ python atualizar.py --hoje     # modo plataforma: dados e previsoes ate hoje
 streamlit run app.py           # abre a aplicação web
 python -m pytest -v            # testes automatizados
 python medir_desempenho.py     # mede o ganho do paralelismo
+python analise_tendencia.py    # R² linear x exponencial e R² dos classificadores (gera um Excel)
 ```
 
 O notebook `estudo_passo_a_passo.ipynb` percorre o pipeline de forma didática.
@@ -70,6 +71,7 @@ A aplicação indica qual dos dois casos está sendo exibido e, separadamente, a
 | `app.py` | Aplicação web (Streamlit) |
 | `atualizar.py` | Orquestra as etapas |
 | `medir_desempenho.py` | Benchmark sequencial × paralelo |
+| `analise_tendencia.py`, `planilha_tendencia.py` | Análise complementar: tendência linear × exponencial (R²), passeio aleatório e pseudo-R² dos classificadores; gera `resultados/teste_r2_linear_exponencial.xlsx` com as fórmulas |
 | `tests/` | Testes automatizados (pytest) |
 | `dados/processados/`, `resultados/`, `figuras/` | Saídas usadas pela aplicação publicada |
 
