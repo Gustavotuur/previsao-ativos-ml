@@ -1,0 +1,17 @@
+# Versões exatas usadas para gerar os resultados da monografia (Windows, Python 3.12.10).
+# Instalação reproduzível: pip install -r requirements-lock.txt
+pandas==3.1.0
+numpy==2.5.4
+scikit-learn==1.9.1
+scipy==1.18.1
+joblib==1.6.0
+yfinance==1.7.0
+curl_cffi==0.17.0
+requests==2.34.2
+certifi==2026.10.23
+pyarrow==26.0.0
+openpyxl==3.1.5
+matplotlib==3.11.2
+seaborn==0.13.2
+streamlit==1.66.1
+pytest==9.2.0

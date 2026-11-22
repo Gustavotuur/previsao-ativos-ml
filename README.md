@@ -39,6 +39,8 @@ Requisitos: Python 3.11 ou mais novo (os resultados foram gerados com Python 3.1
 python -m venv .venv
 # Windows: .\.venv\Scripts\Activate.ps1    Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
+# ou, para as versões exatas usadas na monografia:
+pip install -r requirements-lock.txt
 
 python atualizar.py            # reproduz os resultados da monografia (dados congelados)
 python atualizar.py --preparar # recalcula as variaveis a partir dos dados brutos ja baixados
